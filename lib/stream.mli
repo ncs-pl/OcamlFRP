@@ -28,11 +28,11 @@ val head : 'a stream -> 'a
 val tail : 'a stream -> 'a stream
 
 (** [map f s] constructs a stream by applying function [f] to values of stream [s]. *)
-val map : 'a 'b. ('a -> 'b) -> 'a stream -> 'b stream
+val map : ('a -> 'b) -> 'a stream -> 'b stream
 
 (** [apply f s] constructs a new stream by applying functions from stream of function
     [f] to the values of stream [s]. *)
-val apply : 'a 'b. ('a -> 'b) stream -> 'a stream -> 'b stream
+val apply : ('a -> 'b) stream -> 'a stream -> 'b stream
 
 (** [produce g s] constructs a stream from generator function [g] and
     initial state [s]. *)
@@ -45,12 +45,13 @@ val produce : ('s -> 'a * 's) -> 's -> 'a stream
 
 (** [coiterate f s] constructs a stream using the coiterator [(f, s)], 
     where [f] is the function and [s] is the initial state. *)
-val coiterate : 'a. ('a -> 'a) -> 'a -> 'a stream
+val coiterate : ('a -> 'a) -> 'a -> 'a stream
 
 (** [constant x] returns a constant stream where every element has the value x. *)
-val constant : 'a. 'a -> 'a stream
+val constant : 'a -> 'a stream
 
-(** [perform s f n] consumes stream [s], applying function [f] on [n] values of [s]. *)
+(** [perform s f n] consumes stream [s], applying function [f] (with side-effects)
+    on [n] values of [s]. *)
 val perform : 'a stream -> ('a -> unit) -> int -> unit
 
 (** [consume s p d] consumes the values from stream [s] as long as the values validates
