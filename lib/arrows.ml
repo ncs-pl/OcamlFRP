@@ -3,149 +3,149 @@
 (*                                OCamlFRP                               *)
 (*                                                                       *)
 (* Copyright (C) 2025  Frédéric Dabrowski                                *)
+(* Copyright (C) 2025  Nicolas Paul                                      *)
 (* All rights reserved.  This file is distributed under the terms of     *)
 (* the GNU Lesser General Public License version 3.                      *)
 (* You should have received a copy of the GNU General Public License     *)
 (* along with this program.  If not, see <https://www.gnu.org/licenses/>.*)
 (*************************************************************************)
 
-open Stream   
+open Stream
 
-type ('a, 'b) sf = 
-  SF : ('s -> 'a -> 'b * 's) * 's -> ('a, 'b) sf
+type ('a, 'b) sf = SF : ('s -> 'a -> 'b * 's) * 's -> ('a, 'b) sf
 
-let arr : ('a -> 'b) -> ('a, 'b) sf = 
+let arr : ('a -> 'b) -> ('a, 'b) sf =
   fun f ->
-    let t, s = (fun () a -> (f a, ())), () in
-      SF (t, s)
+  let h () x = f x, () in
+  SF (h, ())
+;;
 
-let (>>>) : ('a, 'b) sf -> ('b, 'c) sf -> ('a, 'c) sf =
-    fun (SF (t1, s1)) (SF (t2, s2)) -> 
-      let t = 
-          fun (s1, s2) a -> 
-            let (b, s1') = t1 s1 a in 
-              let (c, s2') = t2 s2 b in 
-                (c, (s1', s2'))
-      and s = (s1, s2) in 
-        SF (t, s)
+let ( >>> ) (SF (f, f0)) (SF (g, g0)) =
+  let h (s1, s2) x =
+    let x', s1' = f s1 x in
+    let x'', s2' = g s2 x' in
+    x'', (s1', s2')
+  in
+  let h0 = f0, g0 in
+  SF (h, h0)
+;;
 
-let first : ('a, 'b) sf -> ('a * 'c, 'b * 'c) sf =
-  fun (SF (t, s)) -> 
-    let t = 
-      fun s (a, c) -> 
-        let (b, s') = t s a in ((b, c), s')
-    in SF (t,s)
-    
-let second : ('a, 'b) sf -> ('c * 'a, 'c * 'b) sf =
-  fun (SF (t, s)) -> 
-    let t = 
-      fun s (c, a) -> 
-        let (b, s') = t s a in ((c, b), s')
-    in SF (t, s)
-    
-let parallel : ('a, 'b) sf -> ('c, 'd) sf -> ('a * 'c, 'b * 'd) sf = 
-  fun (SF (t1, s1)) (SF (t2, s2)) ->
-    let t =  
-      fun (s1, s2) (a, c) -> 
-        let (b, s1') = t1 s1 a
-        and (d, s2') = t2 s2 c in 
-          ((b, d), (s1', s2'))
-    in SF (t, (s1, s2))
+let first (SF (f, f0)) =
+  let h s (x1, x2) =
+    let x1', s' = f s x1 in
+    (x1', x2), s'
+  in
+  SF (h, f0)
+;;
 
-let fanout : ('a, 'b) sf -> ('a, 'c) sf -> ('a, 'b * 'c) sf =
-    fun (SF (t1, s1)) (SF (t2, s2)) ->
-      let t = 
-        fun (s1, s2) a -> 
-          let (b, s1') = t1 s1 a
-          and (c, s2') = t2 s2 a in 
-              ((b, c), (s1', s2'))
-        in SF (t, (s1, s2))    
-            
-let left : 
-  ('a, 'b) sf -> 
-    (('a, 'c) Either.t, ('b, 'c) Either.t) sf = 
-  fun (SF (t, s)) -> 
-    let t = fun s -> 
-      function 
-        | Either.Left a -> 
-            let (b, s') = t s a in 
-              (Either.Left b, s')
-        | Either.Right c -> (Either.Right c, s)
-    in SF (t, s)
+let second (SF (f, f0)) =
+  let h s (x1, x2) =
+    let x2', s' = f s x2 in
+    (x1, x2'), s'
+  in
+  SF (h, f0)
+;;
 
-let right : 
-  ('a, 'b) sf -> 
-    (('c, 'a) Either.t, ('c, 'b) Either.t) sf = 
-  fun (SF (t, s)) -> 
-    let t = fun s -> 
-      function 
-        | Either.Left c -> (Either.Left c, s)
-        | Either.Right a -> 
-            let (b, state') = t s a in 
-              (Either.Right b, state')
-    in SF (t, s)
+let parallel (SF (f, f0)) (SF (g, g0)) =
+  let h (s1, s2) (x1, x2) =
+    let x1', s1' = f s1 x1 in
+    let x2', s2' = g s2 x2 in
+    (x1', x2'), (s1', s2')
+  in
+  let h0 = f0, g0 in
+  SF (h, h0)
+;;
 
-let choice : 
-  ('a, 'c) sf -> ('b, 'd) sf -> 
-    (('a, 'b) Either.t, ('c, 'd) Either.t) sf = 
-  fun (SF (t1, s1)) (SF (t2, s2)) -> 
-    let t = 
-      fun (state1, state2) -> 
-        function 
-          | Either.Left a -> 
-              let (c, state') = t1 s1 a in 
-                (Either.Left c, (state', state2))
-          | Either.Right b -> 
-            let (d, state') = t2 s2 b in 
-              (Either.Right d, (state1, state'))
-          in 
-            SF (t, (s1, s2))
+let fanout (SF (f, f0)) (SF (g, g0)) =
+  let h (s1, s2) a =
+    let b, s1' = f s1 a in
+    let c, s2' = g s2 a in
+    (b, c), (s1', s2')
+  in
+  let h0 = f0, g0 in
+  SF (h, h0)
+;;
 
-let fanin : 
-  ('a, 'c) sf -> ('b, 'c) sf -> 
-      (('a, 'b) Either.t, 'c) sf =
-  fun (SF (t1, s1)) (SF (t2, s2)) -> 
-    let t = 
-      fun (s1, s2) -> 
-        function 
-          | Either.Left a -> 
-            let (b, s') = t1 s1 a in 
-              (b, (s', s2))
-          | Either.Right c -> 
-            let (b, s') = t2 s2 c in 
-              (b, (s1, s'))
-    in SF (t, (s1, s2))
-        
-let loop : ('a * 'c, 'b * 'c) sf -> 'c -> ('a, 'b) sf =
-  fun (SF (t, s)) c ->
-    let t = 
-      fun (state, c) a ->
-        let (b, c'), state' = t state (a, c) in  
-          (b, (state', c'))
-    in SF (t, (s, c))
+let left (SF (f, f0)) =
+  let h s = function
+    | Either.Left v ->
+      let v', s' = f s v in
+      Either.Left v', s'
+    | Either.Right v -> Either.Right v, s
+  in
+  SF (h, f0)
+;;
 
-let lift : ('a, 'b) sf -> 'a stream -> 'b stream =
-  fun (SF (t1, s1)) -> 
-    fun (Str (t2, s2)) -> 
-      let t = fun (state2, state1) -> 
-        let (a, state2') = t2 state2 in 
-          let (b, state1') = t1 state1 a in 
-            (b, (state2', state1'))
-      in Str (t, (s2, s1))
+let right (SF (f, f0)) =
+  let h s = function
+    | Either.Left v -> Either.left v, s
+    | Either.Right v ->
+      let v', s' = f s v in
+      Either.Right v', s'
+  in
+  SF (h, f0)
+;;
 
-module Arr = struct 
+let choice (SF (f, f0)) (SF (g, g0)) =
+  let h (s1, s2) = function
+    | Either.Left v ->
+      let v', s1' = f s1 v in
+      Either.Left v', (s1', s2)
+    | Either.Right v ->
+      let v', s2' = g s2 v in
+      Either.Right v', (s1, s2')
+  in
+  let h0 = f0, g0 in
+  SF (h, h0)
+;;
 
-  let id : ('a, 'a) sf = 
-    let t = fun s a -> (a, s) in SF (t, ())
-  
-  let const : 'b -> ('a, 'b) sf = 
-    fun b -> 
-      let t = fun s _ -> (b, s) in SF (t, ())
-  
-  let dup : ('a, 'a * 'a) sf = 
-    let t = fun s a -> ((a, a), s) in SF (t, ())
+let fanin (SF (f, f0)) (SF (g, g0)) =
+  let h (s1, s2) = function
+    | Either.Left v ->
+      let v', s1' = f s1 v in
+      v', (s1', s2)
+    | Either.Right v ->
+      let v', s2' = g s2 v in
+      v', (s1, s2')
+  in
+  let h0 = f0, g0 in
+  SF (h, h0)
+;;
 
-  let delay : 'a -> ('a, 'a) sf = 
-    fun a -> loop (arr Utils.swap) a
+let loop (SF (f, f0)) k =
+  let h (s, k) x =
+    let (x', k'), s' = f s (x, k) in
+    x', (s', k')
+  in
+  let h0 = f0, k in
+  SF (h, h0)
+;;
 
+let lift (SF (f, f0)) (Str (g, g0)) =
+  let h (s1, s2) =
+    let x, s1' = g s1 in
+    let x', s2' = f s2 x in
+    x', (s1', s2')
+  in
+  let h0 = g0, f0 in
+  Str (h, h0)
+;;
+
+module Arr = struct
+  let id =
+    let f s x = x, s in
+    SF (f, ())
+  ;;
+
+  let const x =
+    let f s _ = x, s in
+    SF (f, ())
+  ;;
+
+  let dup =
+    let f s x = (x, x), s in
+    SF (f, ())
+  ;;
+
+  let delay x = loop (arr Utils.swap) x
 end
